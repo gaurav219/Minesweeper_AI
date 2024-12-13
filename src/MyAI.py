@@ -17,11 +17,9 @@ from Action import Action
 from enum import Enum, auto
 import itertools
 
-
 class GameAction(Enum):
     OPEN = auto()
     FLAG = auto()
-
 
 class Variable:
     def __init__(self, x, y):
@@ -110,56 +108,39 @@ class MinesweeperCSP:
             type, (x, y) = action
             if type == GameAction.OPEN:
                 self.safe_cells.add((x, y))
+                self.board[x][y] = 0  # Set the cell as revealed in the board
             else:
                 self.mine_cells.add((x, y))
+                self.board[x][y] = 'M'  # Set the cell as flagged in the board
+
     def apply_bomb_rule(self):
         for x in range(self.rowDimension):
             for y in range(self.colDimension):
-                # Check if the current cell is a numbered cell
                 if isinstance(self.board[x][y], int) and self.board[x][y] > 0:
-					# Find neighbors
-                    neighbors = list(self.neighbors(x, y))
-                    hidden_neighbors = [neighbor for neighbor in neighbors if self.board[neighbor[0]][neighbor[1]] == '?']
-                    
-                    # Count unflagged bombs around it
-                    flagged_mines = [neighbor for neighbor in hidden_neighbors if neighbor in self.mine_cells]
-                    unflagged_bombs_remaining = self.board[x][y] - len(flagged_mines)
-					
-					# If the number of hidden neighbors equals the number of unflagged bombs remaining
-                    if len(hidden_neighbors) == unflagged_bombs_remaining:
-						# All hidden neighbors must be flagged as bombs
-                        for(nx, ny) in hidden_neighbors:
-                            self.mine_cells.add((nx, ny))  # Mark the cell as a mine
-                            self.safe_cells.discard((nx, ny))  # Remove from safe cells
-                            self.board[nx][ny] = 'M'  # Update the board to reflect that it's a mine
-                            print(f"Bomb rule applied: Flagging ({nx}, {ny}) as a mine.")
-                            
-    def apply_no_bomb_rule(self):                        
-        for x in range(self.rowDimension):
-            for y in range(self.colDimension):
-                # Check if the current tile is a numbered tile (greater than 0)
-                if isinstance(self.board[x][y], int) and self.board[x][y] > 0:
-                    # Find neighbors
                     neighbors = list(self.neighbours(x, y))
                     hidden_neighbors = [neighbor for neighbor in neighbors if self.board[neighbor[0]][neighbor[1]] == '?']
-                    
-                    # Count the number of flagged bombs around the tile
+                    flagged_mines = [neighbor for neighbor in hidden_neighbors if neighbor in self.mine_cells]
+                    unflagged_bombs_remaining = self.board[x][y] - len(flagged_mines)
+                    if len(hidden_neighbors) == unflagged_bombs_remaining:
+                        for (nx, ny) in hidden_neighbors:
+                            self.mine_cells.add((nx, ny))
+                            self.board[nx][ny] = 'M'
+                            print(f"Bomb rule applied: Flagging ({nx}, {ny}) as a mine.")
+
+    def apply_no_bomb_rule(self):
+        for x in range(self.rowDimension):
+            for y in range(self.colDimension):
+                if isinstance(self.board[x][y], int) and self.board[x][y] > 0:
+                    neighbors = list(self.neighbours(x, y))
+                    hidden_neighbors = [neighbor for neighbor in neighbors if self.board[neighbor[0]][neighbor[1]] == '?']
                     flagged_mines = [neighbor for neighbor in hidden_neighbors if neighbor in self.mine_cells]
                     flagged_count = len(flagged_mines)
-                    
-                    # Get the number on the current tile
                     tile_value = self.board[x][y]
-                    
-                    # Check if the number of flagged bombs equals the number on the tile
                     if flagged_count == tile_value:
-                        # All remaining hidden neighbors must be safe (not bombs)
                         for (nx, ny) in hidden_neighbors:
-                            # Mark the cell as safe (i.e., not a bomb)
-                            self.safe_cells.add((nx, ny))  # Add it to safe cells
-                            self.mine_cells.discard((nx, ny))  # Remove from mine cells
-                            self.board[nx][ny] = 'S'  # Update the board to reflect that it's safe
+                            self.safe_cells.add((nx, ny))
+                            self.board[nx][ny] = 'S'
                             print(f"No bomb rule applied: Marking ({nx}, {ny}) as safe.")
-
 
 class MyAI(AI):  # Line 164
     def __init__(self, rowDimension, colDimension, totalMines, startX, startY):  # Line 165
@@ -238,31 +219,34 @@ class MyAI(AI):  # Line 164
                 self.uncovered.add((row, col))  # Add to uncovered set
                 print(f"Line 239: Marked mine at ({row, col})")  # Line 239
 
-    def getAction(self, number: int) -> Action:  # Line 241
-        print(f"Line 242: Getting action with number {number}")  # Line 242
+    def getAction(self, number: int) -> Action:
+        print(f"Line 242: Getting action with number {number}")
         self.apply_constraints()
         self.reveal_safe_cells()
         self.mark_mines()
 
-		# Process cells to explore
+        # Process cells to explore
         while self.to_explore:
             row, col = self.to_explore.pop(0)
-            if (row, col) not in self.uncovered:
-                print(f"Line 251: Uncovering cell at ({row}, {col})")  # Line 251
+            if (row, col) not in self.uncovered and 0 <= row < self.rowDimension and 0 <= col < self.colDimension:
+                print(f"Line 251: Uncovering cell at ({row}, {col})")
                 self.uncovered.add((row, col))  # Mark as uncovered
-				# Add neighboring cells to the exploration queue
+
+                # Add neighboring cells to the exploration queue
                 neighbors = self.get_neighbors(row, col)
                 for (r, c) in neighbors:
-                    if self.board[r][c] == '?' and (r, c) not in self.uncovered:
+                    if self.board[r][c] == '?' and (r, c) not in self.uncovered and (r,c) not in self.to_explore:
                         self.to_explore.append((r, c))
-                    return Action(AI.Action.UNCOVER, row, col)
+                print(self.to_explore)
+                return Action(AI.Action.UNCOVER, row, col)
 
-		# Flag cells identified as mines
+        # Flag cells identified as mines
         if self.mine_cells:
             row, col = self.mine_cells.pop()
             if (row, col) not in self.uncovered:
-                print(f"Line 264: Flagging mine at ({row}, {col})")  # Line 264
+                print(f"Line 264: Flagging mine at ({row}, {col})")
                 self.uncovered.add((row, col))  # Mark as uncovered
                 return Action(AI.Action.FLAG, row, col)
-        print("Line 267: No more actions possible, leaving the game")  # Line 267
+
+        print("Line 267: No more actions possible, leaving the game")
         return Action(AI.Action.LEAVE)
