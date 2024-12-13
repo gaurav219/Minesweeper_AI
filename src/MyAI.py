@@ -171,35 +171,87 @@ class MyAI(AI):  # Line 164
         return neighbors
 
     def apply_constraints(self):
-        print("Line 193: Applying constraints")  # Line 193
+        print("Line 193: Applying constraints")  # Debug message for tracing
 
-        # Use CSP to solve trivial constraints or apply any CSP-specific logic
+        # Step 1: Solve trivial constraints using the CSP solver
         solved_constraints = self.csp.solve_trivial_constraints()
-        # Apply those constraints (actions can be OPEN or FLAG)
         for action in solved_constraints:
-            self.apply_actions([action])
+            self.apply_actions([action])  # Apply the solved actions (OPEN or FLAG)
 
-        # Other CSP-related actions, like applying the bomb rule or no-bomb rule
-        self.csp.apply_bomb_rule()
-        self.csp.apply_no_bomb_rule()
+        # Step 2: Apply CSP-specific rules to reduce the solution space
+        self.csp.apply_bomb_rule()  # Handle cells that must contain bombs
+        self.csp.apply_no_bomb_rule()  # Handle cells that cannot contain bombs
 
-        # Now handle cell exploration logic (this part is separate from CSP)
+        # Step 3: Explore the grid to enforce logical constraints for each cell
         for row in range(self.rowDimension):
             for col in range(self.colDimension):
                 if isinstance(self.board[row][col], int) and self.board[row][col] > 0:
-                    neighbors = self.get_neighbors(row, col)
+                    neighbors = self.get_neighbors(row, col)  # Get all neighboring cells
                     flagged_count = sum(1 for (r, c) in neighbors if self.board[r][c] == 'M')
                     hidden_neighbors = [(r, c) for (r, c) in neighbors if self.board[r][c] == '?']
                     num_mines_needed = self.board[row][col] - flagged_count
 
-                    print(f"Line 214: Cell ({row}, {col}) with value {self.board[row][col]} has {flagged_count} flagged mines and needs {num_mines_needed} more mines. Hidden neighbors: {hidden_neighbors}")  # Line 212
+                    print(f"Line 214: Cell ({row}, {col}) with value {self.board[row][col]} has {flagged_count} flagged mines and needs {num_mines_needed} more mines. Hidden neighbors: {hidden_neighbors}")
 
+                    # Case 1: All hidden neighbors must contain mines
                     if num_mines_needed == len(hidden_neighbors):
                         for (r, c) in hidden_neighbors:
-                            self.enforce_binary_domain(r, c, True)
+                            self.enforce_binary_domain(r, c, True)  # Mark as Mine
+
+                    # Case 2: All hidden neighbors are safe
                     elif num_mines_needed == 0:
                         for (r, c) in hidden_neighbors:
-                            self.enforce_binary_domain(r, c, False)
+                            self.enforce_binary_domain(r, c, False)  # Mark as Safe
+
+        # Step 4: Check if the board is fully resolved
+        if not self.is_fully_resolved():
+            print("The board is not fully resolved. Applying backtracking...", self.to_explore[0][0], self.to_explore[0][1])
+            if not self.backtracking(self.to_explore[0][0], self.to_explore[0][1]):
+                raise ValueError("No solution found: The CSP problem is unsolvable.")
+
+        print("Constraints applied successfully. Board state updated.")
+
+    # Supporting Method Implementations
+
+    def is_fully_resolved(self) -> bool:
+        """Checks if all cells on the board are resolved (no '?')."""
+        return all(cell != '?' for row in self.board for cell in row)
+
+    def backtracking(self, startX: int, startY: int) -> bool:
+        """Recursive backtracking algorithm to solve unresolved cells."""
+        for row in range(startX, self.rowDimension):
+            for col in range(startY if row == startX else 0, self.colDimension):
+                if self.board[row][col] == '?':  # Unresolved cell found
+                    for value in [True, False]:  # True = Mine, False = Safe
+                        self.enforce_binary_domain(row, col, value)  # Tentative assignment
+                        if self.is_consistent(row, col):  # Check consistency
+                            if self.backtracking(row, col):  # Recur
+                                return True
+                        self.enforce_binary_domain(row, col, None)  # Undo assignment
+                    return False  # No valid assignments, backtrack
+        return True  # Fully resolved board
+
+    def is_consistent(self, row: int, col: int) -> bool:
+        """Checks if the current board state satisfies all constraints."""
+        neighbors = self.get_neighbors(row, col)
+        for (r, c) in neighbors:
+            if isinstance(self.board[r][c], int):  # If a number cell
+                flagged_count = sum(1 for (nr, nc) in self.get_neighbors(r, c) if self.board[nr][nc] == 'M')
+                hidden_neighbors = [(nr, nc) for (nr, nc) in self.get_neighbors(r, c) if self.board[nr][nc] == '?']
+                num_mines_needed = self.board[r][c] - flagged_count
+                if num_mines_needed < 0 or num_mines_needed > len(hidden_neighbors):
+                    return False  # Constraints violated
+        return True
+
+    def enforce_binary_domain(self, row: int, col: int, value: bool):
+        """Assigns a value (True for Mine, False for Safe) to a cell, or resets it."""
+        if value is None:
+            self.board[row][col] = '?'  # Reset the cell
+        elif value:
+            self.board[row][col] = 'M'  # Mark as Mine
+        else:
+            self.board[row][col] = '0'  # Mark as Safe
+
 
     def reveal_safe_cells(self):  # Line 221
         print("Line 224: Revealing safe cells")  # Line 224
