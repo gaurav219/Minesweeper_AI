@@ -1,4 +1,4 @@
-# AI Project Team 5
+# CS271P - Artificial Intelligence Project Team 5
 
 ## Description
 
